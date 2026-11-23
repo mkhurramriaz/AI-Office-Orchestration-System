@@ -1,35 +1,15 @@
+# Python environments and cache
+.venv/
+**/.venv/
+__pycache__/
+*.py[cod]
+
 # Environment variables
 .env
 .env.*
-**/.env
-**/.env.*
-!.env.example
-!**/.env.example
 
-# Python
-__pycache__/
-*.pyc
-venv/
-.venv/
-*.egg-info/
+# Frontend dependencies
+node_modules/
 
-# Jupyter
-.ipynb_checkpoints/
-
-# IDE
-.vscode/
-
-# Database
-*.db
-*.sqlite3
-
-# ChromaDB
-chroma_db/
-chroma_data/
-
-# Logs
-*.log
-
-# OS
-.DS_Store
-Thumbs.db
+# ChromaDB generated data
+Data/chroma_db/
