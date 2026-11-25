@@ -1,0 +1,93 @@
+IT SECURITY POLICY
+TaskFlow AI — Information Technology Security Policy
+Version 3.0 | Effective Date: 2025-01-01
+
+1. PURPOSE AND SCOPE
+
+This policy establishes minimum security requirements for all information technology
+systems, networks, and data at TaskFlow AI. It applies to all employees, contractors,
+and third-party vendors who access company systems.
+
+2. PASSWORD REQUIREMENTS
+
+All system passwords must meet the following criteria:
+- Minimum length: 12 characters.
+- Must include uppercase and lowercase letters, numbers, and special characters.
+- Must not contain the user's name, email, or common dictionary words.
+- Must be changed every 90 days.
+- Previous 12 passwords cannot be reused.
+
+Passwords must never be:
+- Written down or stored in plain text.
+- Shared with colleagues, managers, or IT staff.
+- Entered in the presence of others.
+
+3. MULTI-FACTOR AUTHENTICATION (MFA)
+
+MFA is mandatory for:
+- All corporate email accounts.
+- VPN access.
+- Cloud service provider consoles.
+- Code repositories.
+- Financial and HR systems.
+
+4. DATA CLASSIFICATION
+
+All company data is classified into one of four categories:
+
+PUBLIC: Information intended for external release. No restrictions.
+INTERNAL: General business information. Must not be shared externally without approval.
+CONFIDENTIAL: Sensitive business data (financials, personnel files). Encrypted storage required.
+RESTRICTED: Highest sensitivity (passwords, cryptographic keys). Strictly need-to-know basis.
+
+5. ACCEPTABLE USE OF COMPANY ASSETS
+
+Employees may use company-provided devices for limited personal use provided:
+- It does not interfere with work duties.
+- It does not involve illegal content.
+- It does not consume excessive bandwidth.
+- Security software is not disabled.
+
+Installation of unauthorised software is prohibited. Contact IT to request software installation.
+
+6. REMOTE WORK SECURITY
+
+Employees working remotely must:
+- Use the company VPN for all business activities.
+- Ensure their home Wi-Fi network is password-protected with WPA2 or WPA3.
+- Not use public Wi-Fi for business purposes without VPN.
+- Keep physical devices secure and out of sight when not in use.
+
+7. INCIDENT REPORTING
+
+Security incidents must be reported to IT Security within one hour of detection.
+An incident includes:
+- Suspected phishing or social engineering attempt.
+- Loss or theft of a company device.
+- Unauthorised access to systems or data.
+- Malware detection.
+
+Failure to report a known incident is a disciplinary offence.
+
+8. THIRD-PARTY ACCESS
+
+Vendors and contractors requiring access to company systems must:
+- Sign the Third-Party Security Agreement.
+- Use separate, time-limited credentials.
+- Access only the minimum systems necessary for their engagement.
+- Return or destroy all company data upon engagement completion.
+
+9. BACKUP AND RECOVERY
+
+Critical business data must be backed up daily.
+Backups are retained for a minimum of 90 days.
+Recovery procedures are tested quarterly.
+Employees must not store critical data exclusively on local devices.
+
+10. COMPLIANCE AND ENFORCEMENT
+
+Violations of this policy may result in disciplinary action up to and including
+termination of employment and referral to law enforcement where applicable.
+IT Security conducts quarterly audits to verify compliance.
+
+Questions: security@taskflow-ai.internal
