@@ -8,7 +8,9 @@ Attaches rich source metadata to every loaded document.
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -20,6 +22,20 @@ if TYPE_CHECKING:
     pass
 
 logger = logging.getLogger(__name__)
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+
+
+def repository_relative_path(path: Path) -> str:
+    """Return a stable, slash-normalized path relative to the repository root."""
+    resolved = path.resolve()
+    try:
+        relative = os.path.relpath(resolved, REPOSITORY_ROOT)
+    except ValueError:
+        # Windows cannot compute relpath across drives (common for pytest temp
+        # dirs). Preserve a normalized, collision-free identity in that case.
+        normalized = resolved.as_posix().lstrip("/")
+        return f"_external/{normalized.replace(':', '')}"
+    return Path(relative).as_posix()
 
 # Supported file extensions mapped to their MIME-like type label
 SUPPORTED_EXTENSIONS: dict[str, str] = {
@@ -43,13 +59,22 @@ def _build_base_metadata(path: Path) -> dict:
     """Build the standard metadata dict attached to every chunk from this file."""
     stat = path.stat()
     return {
-        "source": path.name,
-        "source_path": str(path.resolve()),
+        "source": repository_relative_path(path),
+        "source_path": repository_relative_path(path),
         "file_type": SUPPORTED_EXTENSIONS.get(path.suffix.lower(), "unknown"),
         "file_size_bytes": stat.st_size,
         "file_hash": _compute_file_hash(path),
         "last_modified": stat.st_mtime,
     }
+
+
+def _normalize_metadata_value(value: object) -> str | int | float | bool:
+    """Convert YAML values to Chroma-supported scalars while retaining structure."""
+    if value is None:
+        return "null"
+    if isinstance(value, (str, int, float, bool)):
+        return value
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
 
 
 def load_pdf(path: Path) -> list[Document]:
@@ -89,10 +114,14 @@ def load_markdown(path: Path) -> list[Document]:
     logger.debug("Loading Markdown: %s", path.name)
     post = frontmatter.load(str(path))
     content: str = post.content
-    fm_meta: dict = dict(post.metadata)  # YAML front-matter fields
+    fm_meta: dict = {
+        str(key): _normalize_metadata_value(value)
+        for key, value in dict(post.metadata).items()
+    }  # YAML front-matter fields
 
     base_meta = _build_base_metadata(path)
-    merged_meta = {**base_meta, **fm_meta}  # front-matter wins on key collision
+    # Reserved source/hash fields must remain generated from the actual file.
+    merged_meta = {**fm_meta, **base_meta}
     merged_meta["has_frontmatter"] = bool(fm_meta)
 
     doc = Document(page_content=content, metadata=merged_meta)
