@@ -49,3 +49,16 @@ def get_embedding_function() -> GoogleGenerativeAIEmbeddings:
         google_api_key=settings.GEMINI_API_KEY,
         task_type="retrieval_document",  # optimise embeddings for retrieval
     )
+
+
+@lru_cache(maxsize=1)
+def get_query_embedding_function() -> GoogleGenerativeAIEmbeddings:
+    """Return the Gemini embedding client configured for retrieval queries."""
+    settings = get_settings()
+    if not settings.GEMINI_API_KEY:
+        raise ValueError("GEMINI_API_KEY is not configured for document retrieval.")
+    return GoogleGenerativeAIEmbeddings(
+        model=GEMINI_EMBEDDING_MODEL,
+        google_api_key=settings.GEMINI_API_KEY,
+        task_type="retrieval_query",
+    )
