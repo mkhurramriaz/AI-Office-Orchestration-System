@@ -95,7 +95,7 @@ class TestTextLoading:
     """Tests for load_text() and load_markdown()."""
 
     def test_load_txt_attaches_metadata(self, tmp_path):
-        from app.rag.document_loader import load_text
+        from app.rag.document_loader import load_text, repository_relative_path
 
         f = tmp_path / "sample.txt"
         f.write_text("Hello TaskFlow", encoding="utf-8")
@@ -103,7 +103,7 @@ class TestTextLoading:
         docs = load_text(f)
         assert len(docs) >= 1
         meta = docs[0].metadata
-        assert meta["source"] == "sample.txt"
+        assert meta["source"] == repository_relative_path(f)
         assert meta["file_type"] == "text"
         assert "file_hash" in meta
         assert "file_size_bytes" in meta
@@ -119,7 +119,7 @@ class TestTextLoading:
         assert "The quick brown fox" in docs[0].page_content
 
     def test_load_markdown_basic(self, tmp_path):
-        from app.rag.document_loader import load_markdown
+        from app.rag.document_loader import load_markdown, repository_relative_path
 
         f = tmp_path / "doc.md"
         f.write_text("# Heading\n\nSome content here.", encoding="utf-8")
@@ -127,7 +127,7 @@ class TestTextLoading:
         docs = load_markdown(f)
         assert len(docs) == 1
         assert "Some content here." in docs[0].page_content
-        assert docs[0].metadata["source"] == "doc.md"
+        assert docs[0].metadata["source"] == repository_relative_path(f)
         assert docs[0].metadata["file_type"] == "markdown"
 
     def test_load_markdown_extracts_frontmatter(self, tmp_path):
@@ -143,6 +143,20 @@ class TestTextLoading:
         assert meta["author"] == "Jane Doe"
         assert meta["has_frontmatter"] is True
         assert "Body text here." in docs[0].page_content
+
+    def test_markdown_nested_frontmatter_is_chroma_compatible(self, tmp_path):
+        from app.rag.document_loader import load_markdown
+
+        f = tmp_path / "nested.md"
+        f.write_text(
+            '---\ntags: [hr, policy]\nowner:\n  name: Jane\n  teams: [people, legal]\nempty: null\n---\nBody',
+            encoding="utf-8",
+        )
+        metadata = load_markdown(f)[0].metadata
+        assert metadata["tags"] == '["hr", "policy"]'
+        assert metadata["owner"] == '{"name": "Jane", "teams": ["people", "legal"]}'
+        assert metadata["empty"] == "null"
+        assert all(isinstance(value, (str, int, float, bool)) for value in metadata.values())
 
     def test_load_markdown_no_frontmatter(self, tmp_path):
         from app.rag.document_loader import load_markdown
@@ -303,12 +317,12 @@ class TestVectorStoreHelpers:
 
         store = self._make_mock_store(
             metadatas=[
-                {"source": "doc1.txt", "file_hash": "hash_aaa"},
-                {"source": "doc2.pdf", "file_hash": "hash_bbb"},
+                {"source": "policies/doc1.txt", "file_hash": "hash_aaa"},
+                {"source": "reports/doc2.pdf", "file_hash": "hash_bbb"},
             ]
         )
         result = get_indexed_hashes(store)
-        assert result == {"doc1.txt": "hash_aaa", "doc2.pdf": "hash_bbb"}
+        assert result == {"policies/doc1.txt": "hash_aaa", "reports/doc2.pdf": "hash_bbb"}
 
     def test_get_indexed_hashes_empty_collection(self):
         from app.rag.vector_store import get_indexed_hashes
@@ -450,7 +464,9 @@ class TestIngestionService:
         f.write_text("Updated content " * 5, encoding="utf-8")
 
         # Simulate a stale hash (different from actual file hash)
-        mock_hashes.return_value = {"changed.txt": "stale_hash_000"}
+        from app.rag.document_loader import repository_relative_path
+        source_id = repository_relative_path(f)
+        mock_hashes.return_value = {source_id: "stale_hash_000"}
 
         service = self._make_service(str(tmp_path))
         report = service.ingest()
@@ -458,6 +474,7 @@ class TestIngestionService:
         assert report.files_updated == 1
         assert report.files_added == 0
         mock_delete.assert_called_once()
+        assert mock_delete.call_args.args[:2] == (mock_vs.return_value, source_id)
         mock_add.assert_called_once()
         assert report.total_chunks_deleted == 3
 
@@ -473,7 +490,8 @@ class TestIngestionService:
         f.write_bytes(content)
 
         actual_hash = _sha256(content)
-        mock_hashes.return_value = {"stable.txt": actual_hash}
+        from app.rag.document_loader import repository_relative_path
+        mock_hashes.return_value = {repository_relative_path(f): actual_hash}
 
         service = self._make_service(str(tmp_path))
         report = service.ingest()
@@ -496,15 +514,21 @@ class TestIngestionService:
         f.write_bytes(content)
 
         actual_hash = _sha256(content)
-        mock_hashes.return_value = {"stable.txt": actual_hash}  # would normally skip
+        from app.rag.document_loader import repository_relative_path
+        mock_hashes.return_value = {repository_relative_path(f): actual_hash}  # would normally skip
 
         service = self._make_service(str(tmp_path), force=True)
         report = service.ingest()
 
-        # Should be treated as a NEW file (force skips hash comparison)
-        assert report.files_added == 1
+        # Force re-index still replaces existing chunks for the same source.
+        assert report.files_updated == 1
         assert report.files_skipped == 0
         mock_add.assert_called_once()
+        mock_delete.assert_called_once()
+        assert mock_delete.call_args.args[:2] == (
+            mock_vs.return_value,
+            repository_relative_path(f),
+        )
 
     @patch("app.rag.ingestion_service.get_collection_stats", return_value={"total_chunks": 0, "unique_sources": 0, "source_breakdown": {}})
     @patch("app.rag.ingestion_service.get_vector_store")
@@ -532,6 +556,71 @@ class TestIngestionService:
         assert report.files_added == 0
         assert report.file_results[0].status == "failed"
         assert "embed failed" in report.file_results[0].error
+
+    @patch("app.rag.ingestion_service.get_collection_stats", return_value={"total_chunks": 1, "unique_sources": 1, "source_breakdown": {}})
+    @patch("app.rag.ingestion_service.add_chunks", side_effect=RuntimeError("embedding failed"))
+    @patch("app.rag.ingestion_service.delete_source")
+    @patch("app.rag.ingestion_service.get_indexed_hashes")
+    @patch("app.rag.ingestion_service.get_vector_store")
+    def test_failed_reindex_preserves_existing_chunks(
+        self, mock_vs, mock_hashes, mock_delete, mock_add, mock_stats, tmp_path
+    ):
+        from app.rag.document_loader import repository_relative_path
+
+        f = tmp_path / "existing.txt"
+        f.write_text("replacement content", encoding="utf-8")
+        source_id = repository_relative_path(f)
+        existing_chunks = [{"id": "old-chunk", "source": source_id}]
+        mock_hashes.return_value = {source_id: "old-hash"}
+
+        service = self._make_service(str(tmp_path))
+        report = service.ingest()
+
+        assert report.files_failed == 1
+        assert existing_chunks == [{"id": "old-chunk", "source": source_id}]
+        mock_add.assert_called_once()
+        mock_delete.assert_not_called()
+
+    @patch("app.rag.ingestion_service.get_collection_stats", return_value={"total_chunks": 2, "unique_sources": 2, "source_breakdown": {}})
+    @patch("app.rag.ingestion_service.add_chunks", side_effect=[["id-a"], ["id-b"]])
+    @patch("app.rag.ingestion_service.get_indexed_hashes", return_value={})
+    @patch("app.rag.ingestion_service.get_vector_store")
+    def test_same_filename_in_different_directories_has_distinct_identity(
+        self, mock_vs, mock_hashes, mock_add, mock_stats, tmp_path
+    ):
+        from app.rag.document_loader import repository_relative_path
+
+        (tmp_path / "policies").mkdir()
+        (tmp_path / "reports").mkdir()
+        (tmp_path / "policies" / "guide.txt").write_text("policy text", encoding="utf-8")
+        (tmp_path / "reports" / "guide.txt").write_text("report text", encoding="utf-8")
+
+        report = self._make_service(str(tmp_path)).ingest()
+        source_ids = [r.filename for r in report.file_results]
+
+        assert report.files_added == 2
+        assert len(set(source_ids)) == 2
+        assert set(source_ids) == {
+            repository_relative_path(tmp_path / "policies" / "guide.txt"),
+            repository_relative_path(tmp_path / "reports" / "guide.txt"),
+        }
+        chunks = [call.args[1][0] for call in mock_add.call_args_list]
+        assert {chunk.metadata["source"] for chunk in chunks} == set(source_ids)
+
+    @pytest.mark.parametrize("working_directory", ["repository", "backend"])
+    def test_default_documents_directory_resolves_from_repository_root(
+        self, monkeypatch, working_directory
+    ):
+        from app.core.config import get_settings
+        from app.rag.document_loader import REPOSITORY_ROOT
+        from app.rag.ingestion_service import IngestionService
+
+        base = REPOSITORY_ROOT if working_directory == "repository" else REPOSITORY_ROOT / "backend"
+        monkeypatch.chdir(base)
+        settings = get_settings()
+        service = IngestionService(embedding_function=MagicMock())
+
+        assert Path(service._documents_directory) == REPOSITORY_ROOT / settings.DOCUMENTS_DIRECTORY
 
     @patch("app.rag.ingestion_service.get_collection_stats", return_value={"total_chunks": 10, "unique_sources": 2, "source_breakdown": {"a.txt": 5, "b.md": 5}})
     @patch("app.rag.ingestion_service.add_chunks", return_value=["id-1"])

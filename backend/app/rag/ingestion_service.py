@@ -24,7 +24,12 @@ from typing import Any
 from langchain_core.embeddings import Embeddings
 
 from app.core.config import get_settings
-from app.rag.document_loader import discover_documents, load_document
+from app.rag.document_loader import (
+    REPOSITORY_ROOT,
+    discover_documents,
+    load_document,
+    repository_relative_path,
+)
 from app.rag.text_splitter import split_documents
 from app.rag.vector_store import (
     add_chunks,
@@ -32,6 +37,7 @@ from app.rag.vector_store import (
     get_collection_stats,
     get_indexed_hashes,
     get_vector_store,
+    get_source_chunk_ids,
 )
 
 logger = logging.getLogger(__name__)
@@ -127,7 +133,10 @@ class IngestionService:
     ) -> None:
         settings = get_settings()
         self._embedding_function = embedding_function
-        self._documents_directory = documents_directory or settings.DOCUMENTS_DIRECTORY
+        docs_path = Path(documents_directory or settings.DOCUMENTS_DIRECTORY)
+        self._documents_directory = str(
+            docs_path if docs_path.is_absolute() else REPOSITORY_ROOT / docs_path
+        )
         self._chroma_directory = chroma_persist_directory or settings.CHROMA_PERSIST_DIRECTORY
         self._chunk_size = chunk_size
         self._chunk_overlap = chunk_overlap
@@ -175,9 +184,7 @@ class IngestionService:
         )
 
         # Step 3: existing hash index
-        existing_hashes: dict[str, str] = (
-            {} if self._force_reindex else get_indexed_hashes(vector_store)
-        )
+        existing_hashes: dict[str, str] = get_indexed_hashes(vector_store)
 
         # Step 4: process each file
         for path in paths:
@@ -221,7 +228,8 @@ class IngestionService:
         existing_hashes: dict[str, str],
     ) -> FileIngestionResult:
         """Process a single file and return its ingestion result."""
-        filename = path.name
+        filename = repository_relative_path(path)
+        added_ids: list[str] = []
         try:
             # Load document(s) — also computes file_hash in metadata
             raw_docs = load_document(path)
@@ -229,7 +237,8 @@ class IngestionService:
                 return FileIngestionResult(filename=filename, status="failed", error="No content loaded")
 
             current_hash: str = raw_docs[0].metadata.get("file_hash", "")
-            stored_hash: str = existing_hashes.get(filename, "")
+            source_id: str = raw_docs[0].metadata["source"]
+            stored_hash: str = existing_hashes.get(source_id, "")
 
             # --- Duplicate / unchanged check ---
             if stored_hash and stored_hash == current_hash and not self._force_reindex:
@@ -239,11 +248,6 @@ class IngestionService:
             # Determine whether this is an update (file existed before)
             is_update = bool(stored_hash)
 
-            # Delete stale chunks before re-adding
-            deleted = 0
-            if is_update:
-                deleted = delete_source(vector_store, filename)
-
             # Split
             chunks = split_documents(
                 raw_docs,
@@ -251,8 +255,23 @@ class IngestionService:
                 chunk_overlap=self._chunk_overlap,
             )
 
+            # Snapshot the old IDs before insertion so replacement cleanup
+            # cannot match and remove the new chunks with the same source.
+            old_chunk_ids = (
+                get_source_chunk_ids(vector_store, source_id) if is_update else []
+            )
+
             # Embed + store
-            add_chunks(vector_store, chunks)
+            added_ids = add_chunks(vector_store, chunks)
+            if len(added_ids) != len(chunks):
+                raise RuntimeError(
+                    f"Expected {len(chunks)} stored chunk IDs, got {len(added_ids)}"
+                )
+
+            # Only replace the old source after the complete new set is stored.
+            deleted = 0
+            if is_update:
+                deleted = delete_source(vector_store, source_id, chunk_ids=old_chunk_ids)
 
             status = "updated" if is_update else "added"
             logger.info(
@@ -270,5 +289,12 @@ class IngestionService:
             )
 
         except Exception as exc:
+            # A backend may raise after inserting some new chunks. Remove any
+            # IDs it returned, while leaving the previous source untouched.
+            if added_ids:
+                try:
+                    vector_store.delete(ids=added_ids)
+                except Exception:
+                    logger.exception("Could not clean up replacement chunks for '%s'.", filename)
             logger.error("Failed to ingest '%s': %s", filename, exc, exc_info=True)
             return FileIngestionResult(filename=filename, status="failed", error=str(exc))

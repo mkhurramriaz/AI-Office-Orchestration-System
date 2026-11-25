@@ -86,29 +86,31 @@ def get_indexed_hashes(vector_store: Chroma) -> dict[str, str]:
         return {}
 
 
-def delete_source(vector_store: Chroma, source_filename: str) -> int:
+def get_source_chunk_ids(vector_store: Chroma, source: str) -> list[str]:
+    """Return the IDs currently indexed for one normalized source path."""
+    result = vector_store.get(where={"source": source}, include=["metadatas"])
+    return result.get("ids") or []
+
+
+def delete_source(
+    vector_store: Chroma,
+    source_filename: str,
+    chunk_ids: list[str] | None = None,
+) -> int:
     """
     Delete all chunks whose ``source`` metadata field equals *source_filename*.
 
     Returns the number of chunks deleted.
     """
-    try:
-        result = vector_store.get(
-            where={"source": source_filename},
-            include=["metadatas"],
+    ids = chunk_ids if chunk_ids is not None else get_source_chunk_ids(vector_store, source_filename)
+    if ids:
+        vector_store.delete(ids=ids)
+        logger.info(
+            "Deleted %d existing chunk(s) for source: %s",
+            len(ids),
+            source_filename,
         )
-        ids = result.get("ids") or []
-        if ids:
-            vector_store.delete(ids=ids)
-            logger.info(
-                "Deleted %d existing chunk(s) for source: %s",
-                len(ids),
-                source_filename,
-            )
-        return len(ids)
-    except Exception as exc:
-        logger.error("Error deleting source '%s': %s", source_filename, exc)
-        return 0
+    return len(ids)
 
 
 def add_chunks(
