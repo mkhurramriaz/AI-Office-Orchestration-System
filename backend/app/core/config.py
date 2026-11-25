@@ -72,6 +72,10 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str | None = None
     OPENROUTER_API_KEY: str | None = None
 
+    # Phase 3B — RAG retrieval
+    RAG_TOP_K: int = Field(default=4, ge=1, le=20)
+    RAG_MIN_RELEVANCE_SCORE: float = Field(default=0.2, ge=0.0, le=1.0)
+
 
 @lru_cache
 def get_settings() -> Settings:
