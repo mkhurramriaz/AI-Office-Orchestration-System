@@ -3,7 +3,7 @@ from sqlalchemy import Boolean, Enum, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
-from app.models.enums import Department, UserRole
+from app.models.enums import Department, ProfessionalRole, UserRole
 
 if TYPE_CHECKING:
     from app.models.notification import Notification
@@ -30,6 +30,11 @@ class User(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         index=True,
     )
     job_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    professional_role: Mapped[ProfessionalRole | None] = mapped_column(
+        Enum(ProfessionalRole, native_enum=False, length=50),
+        nullable=True,
+        index=True,
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     # Relationships

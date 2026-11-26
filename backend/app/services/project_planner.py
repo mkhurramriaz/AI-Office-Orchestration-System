@@ -12,7 +12,7 @@ from langgraph.graph import END, START, StateGraph
 from pydantic import ValidationError
 
 from app.core.config import get_settings
-from app.models.enums import Department, TaskPriority, UserRole
+from app.models.enums import Department, ProfessionalRole, TaskPriority
 from app.schemas.project_plan import ProjectPlan
 
 logger = logging.getLogger(__name__)
@@ -38,7 +38,8 @@ Create a practical project plan from the manager's brief. Return only the
 requested structured ProjectPlan. Every task must be actionable and include a
 clear title, detailed description, supported required_role, supported
 department, priority, and at least one measurable acceptance criterion.
-Use only these required_role values: {roles}.
+Use only these professional required_role values: {roles}. These are job
+specializations, not account permissions such as ADMIN, MANAGER, or EMPLOYEE.
 Use only these departments: {departments}.
 Use only these priority values: {priorities}.
 Give each task a unique, stable task_id. Add dependencies only when logically
@@ -103,7 +104,7 @@ class ProjectPlannerService:
         return plan
 
     async def _generate_plan_node(self, state: PlannerState) -> dict[str, ProjectPlan]:
-        role_values = ", ".join(role.value for role in UserRole)
+        role_values = ", ".join(role.value for role in ProfessionalRole)
         department_values = ", ".join(department.value for department in Department)
         priority_values = ", ".join(priority.value for priority in TaskPriority)
         system_prompt = SYSTEM_PROMPT.format(

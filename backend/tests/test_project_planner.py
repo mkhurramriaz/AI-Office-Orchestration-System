@@ -10,7 +10,7 @@ from pydantic import ValidationError
 
 from app.api.v1.endpoints.ai import get_project_planner_service
 from app.main import app
-from app.models.enums import Department, TaskPriority, UserRole
+from app.models.enums import Department, ProfessionalRole, TaskPriority
 from app.schemas.project_plan import PlannedTask, ProjectPlan
 from app.services.plan_validation import validate_dependency_graph
 from app.services.project_planner import (
@@ -27,7 +27,7 @@ def planned_task(
     dependencies: list[str] | None = None,
     title: str = "Build API",
     priority: str = "HIGH",
-    required_role: str = "EMPLOYEE",
+    required_role: str = "BACKEND_DEVELOPER",
     department: str = "WEB",
 ) -> dict:
     return {
@@ -74,7 +74,7 @@ def test_project_plan_accepts_valid_structured_plan():
     plan = ProjectPlan.model_validate(valid_plan_data())
     assert plan.project_name == "Employee Portal"
     assert plan.tasks[0].priority is TaskPriority.HIGH
-    assert plan.tasks[0].required_role is UserRole.EMPLOYEE
+    assert plan.tasks[0].required_role is ProfessionalRole.BACKEND_DEVELOPER
     assert plan.tasks[0].department is Department.WEB
 
 
@@ -102,7 +102,7 @@ def test_project_plan_rejects_unsupported_priority():
 
 @pytest.mark.parametrize(
     ("field", "value"),
-    [("required_role", "BACKEND_DEVELOPER"), ("department", "ENGINEERING")],
+    [("required_role", "UNSUPPORTED_ROLE"), ("department", "ENGINEERING")],
 )
 def test_project_plan_rejects_unsupported_role_or_department(field, value):
     with pytest.raises(ValidationError, match=field):
@@ -167,7 +167,7 @@ async def test_planner_generates_and_validates_structured_plan():
     plan = await service.create_plan("Build a secure employee portal")
 
     assert plan.project_name == "Employee Portal"
-    assert plan.tasks[0].required_role is UserRole.EMPLOYEE
+    assert plan.tasks[0].required_role is ProfessionalRole.BACKEND_DEVELOPER
     assert model.messages[0].content.startswith("You are TaskFlow AI's project planning assistant.")
     assert "Do not invent employees" in model.messages[0].content
     assert model.messages[1].content == "Build a secure employee portal"

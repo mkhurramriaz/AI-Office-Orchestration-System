@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.models.enums import Department, TaskPriority, UserRole
+from app.models.enums import Department, ProfessionalRole, TaskPriority
 from app.services.plan_validation import validate_dependency_graph
 
 
@@ -36,7 +36,7 @@ class PlannedTask(BaseModel):
     task_id: str = Field(min_length=1, max_length=64)
     title: str = Field(min_length=2, max_length=255)
     description: str = Field(min_length=1, max_length=4000)
-    required_role: UserRole
+    required_role: ProfessionalRole
     department: Department
     priority: TaskPriority
     dependencies: list[str] = Field(default_factory=list)

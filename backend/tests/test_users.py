@@ -35,12 +35,30 @@ async def test_admin_can_create_user(async_client: AsyncClient, admin_user: User
         "role": "MANAGER",
         "department": "AI",
         "job_title": "AI Lead",
+        "professional_role": "AI_ENGINEER",
     }
     response = await async_client.post("/api/v1/users", json=payload, headers=headers)
     assert response.status_code == 201
     data = response.json()
     assert data["email"] == "charlie_mgr@example.com"
     assert data["role"] == "MANAGER"
+    assert data["professional_role"] == "AI_ENGINEER"
+
+
+@pytest.mark.asyncio
+async def test_user_creation_rejects_unknown_professional_role(async_client: AsyncClient, admin_user: User):
+    response = await async_client.post(
+        "/api/v1/users",
+        json={
+            "full_name": "Invalid Role",
+            "email": "invalid_role@example.com",
+            "password": "Password123!",
+            "role": "EMPLOYEE",
+            "professional_role": "MAGIC_ENGINEER",
+        },
+        headers=get_token_headers(admin_user),
+    )
+    assert response.status_code == 422
 
 
 @pytest.mark.asyncio

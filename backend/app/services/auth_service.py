@@ -44,6 +44,7 @@ class AuthService:
             role=user_in.role,
             department=user_in.department,
             job_title=user_in.job_title,
+            professional_role=user_in.professional_role,
             is_active=True,
         )
         return await self.user_repo.create(user)

@@ -4,13 +4,17 @@ from typing import Annotated
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, require_roles
+from app.api.deps import get_current_user, get_db, require_roles
 from app.models.enums import UserRole
 from app.models.user import User
+from app.repositories.user_repository import UserRepository
 from app.rag.chat_service import GenerationError, RAGChatService, RetrievalError
+from app.schemas.assignment import AssignmentResult
 from app.schemas.ai import ChatRequest, ChatResponse
 from app.schemas.project_plan import ProjectPlan, ProjectPlanRequest
+from app.services.employee_assignment import EmployeeAssignmentService
 from app.services.project_planner import (
     PlanGenerationError,
     PlanValidationError,
@@ -28,6 +32,39 @@ def get_chat_service() -> RAGChatService:
 def get_project_planner_service() -> ProjectPlannerService:
     """Dependency factory for the ephemeral project planning workflow."""
     return ProjectPlannerService()
+
+
+def get_employee_assignment_service(session: AsyncSession = Depends(get_db)) -> EmployeeAssignmentService:
+    """Dependency factory for read-only employee recommendations."""
+    return EmployeeAssignmentService(UserRepository(session))
+
+
+@router.post(
+    "/assign",
+    response_model=AssignmentResult,
+    summary="Recommend employees for a validated project plan",
+    description="Returns deterministic recommendations without persisting tasks or assignments.",
+)
+async def recommend_assignments(
+    plan: ProjectPlan,
+    _current_user: Annotated[
+        User,
+        Depends(require_roles([UserRole.MANAGER, UserRole.ADMIN])),
+    ],
+    assignment_service: Annotated[EmployeeAssignmentService, Depends(get_employee_assignment_service)],
+) -> AssignmentResult:
+    try:
+        return await assignment_service.recommend(plan)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from None
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Employee recommendations are temporarily unavailable.",
+        ) from None
 
 
 @router.post(

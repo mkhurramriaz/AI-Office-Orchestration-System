@@ -31,6 +31,7 @@ class UserService:
             role=user_in.role,
             department=user_in.department,
             job_title=user_in.job_title,
+            professional_role=user_in.professional_role,
             is_active=user_in.is_active,
         )
         return await self.user_repo.create(user)

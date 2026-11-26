@@ -16,10 +16,10 @@ if TYPE_CHECKING:
 class WorkflowExecution(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     __tablename__ = "workflow_executions"
 
-    project_id: Mapped[uuid.UUID] = mapped_column(
+    project_id: Mapped[uuid.UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("projects.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
     initiated_by: Mapped[uuid.UUID] = mapped_column(

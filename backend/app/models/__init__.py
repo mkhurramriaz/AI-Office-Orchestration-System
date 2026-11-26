@@ -3,6 +3,7 @@ from app.models.enums import (
     Department,
     NotificationType,
     ProjectStatus,
+    ProfessionalRole,
     TaskPriority,
     TaskStatus,
     UserRole,
@@ -17,6 +18,7 @@ from app.models.workflow import WorkflowExecution
 
 __all__ = [
     "UserRole",
+    "ProfessionalRole",
     "Department",
     "ProjectStatus",
     "TaskPriority",

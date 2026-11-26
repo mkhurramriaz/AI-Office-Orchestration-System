@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-from app.models.enums import Department, UserRole
+from app.models.enums import Department, ProfessionalRole, UserRole
 
 
 class UserBase(BaseModel):
@@ -10,6 +10,7 @@ class UserBase(BaseModel):
     full_name: str = Field(..., min_length=2, max_length=255)
     department: Department = Department.OTHER
     job_title: str | None = Field(None, max_length=255)
+    professional_role: ProfessionalRole | None = None
 
 
 class UserRegister(UserBase):
@@ -29,6 +30,7 @@ class UserUpdate(BaseModel):
     email: EmailStr | None = None
     department: Department | None = None
     job_title: str | None = None
+    professional_role: ProfessionalRole | None = None
     role: UserRole | None = None
     is_active: bool | None = None
     password: str | None = Field(None, min_length=8, max_length=128)
