@@ -17,6 +17,11 @@ class WorkflowRepository(BaseRepository[WorkflowExecution]):
         result = await self.session.execute(query)
         return result.scalars().first()
 
+    async def get_by_id_for_update(self, workflow_id: uuid.UUID) -> WorkflowExecution | None:
+        query = select(WorkflowExecution).where(WorkflowExecution.id == workflow_id).with_for_update()
+        result = await self.session.execute(query)
+        return result.scalars().first()
+
     async def update_status(
         self,
         execution: WorkflowExecution,

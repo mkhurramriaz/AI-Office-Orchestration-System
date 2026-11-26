@@ -16,12 +16,14 @@ async def test_user_registration_success(async_client: AsyncClient):
         "role": "EMPLOYEE",
         "department": "WEB",
         "job_title": "Frontend Engineer",
+        "professional_role": "FRONTEND_DEVELOPER",
     }
     response = await async_client.post("/api/v1/auth/register", json=payload)
     assert response.status_code == 201
     data = response.json()
     assert data["email"] == "alice@example.com"
     assert data["role"] == "EMPLOYEE"
+    assert data["professional_role"] == "FRONTEND_DEVELOPER"
     assert "hashed_password" not in data
     assert "password" not in data
 

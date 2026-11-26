@@ -17,7 +17,7 @@ from app.core.config import settings
 from app.core.security import create_access_token, get_password_hash
 from app.database.base import Base
 from app.main import app
-from app.models.enums import Department, UserRole
+from app.models.enums import Department, ProfessionalRole, UserRole
 from app.models.user import User
 
 # Test SQLite in-memory async database URL
@@ -70,6 +70,7 @@ async def create_user_helper(
     email: str | None = None,
     full_name: str | None = None,
     department: Department = Department.WEB,
+    professional_role: ProfessionalRole | None = None,
 ) -> User:
     uid = uuid.uuid4().hex[:8]
     user = User(
@@ -79,6 +80,7 @@ async def create_user_helper(
         role=role,
         department=department,
         job_title=f"{role.value} Specialist",
+        professional_role=professional_role,
         is_active=True,
     )
     session.add(user)

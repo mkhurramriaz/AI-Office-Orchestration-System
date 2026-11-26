@@ -35,6 +35,7 @@ tiktoken>=0.8.0
 
 # Phase 4A — AI Project Planner
 langgraph>=1.2.0
+langgraph-checkpoint-postgres>=3.2.1,<4.0.0
 langchain-groq>=1.0.0
 
 # Testing
