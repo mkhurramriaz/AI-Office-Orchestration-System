@@ -183,14 +183,10 @@ class TaskService:
         assigned_to: uuid.UUID | None = None,
         skip: int = 0,
         limit: int = 50,
-    ) -> Sequence[Task]:
+    ) -> tuple[Sequence[Task], int]:
         if current_user.role == UserRole.EMPLOYEE:
-            # Employee only sees tasks assigned to themselves
-            return await self.task_repo.get_employee_tasks(
-                employee_id=current_user.id,
-                skip=skip,
-                limit=limit,
-                status=status_filter,
+            return await self.task_repo.list_tasks_page(
+                skip=skip, limit=limit, assigned_to=current_user.id, status=status_filter,
             )
 
         if project_id:
@@ -200,23 +196,18 @@ class TaskService:
             if current_user.role == UserRole.MANAGER and project.created_by != current_user.id:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to this project's tasks.")
 
-            return await self.task_repo.get_project_tasks(
-                project_id=project_id,
-                skip=skip,
-                limit=limit,
-                status=status_filter,
-                assigned_to=assigned_to,
+            return await self.task_repo.list_tasks_page(
+                project_id=project_id, skip=skip, limit=limit,
+                status=status_filter, assigned_to=assigned_to,
             )
 
         # If no project_id specified and user is Manager
         if current_user.role == UserRole.MANAGER:
             # Fetch tasks across all projects owned by manager
-            mgr_projects = await self.project_repo.get_by_manager(current_user.id)
-            all_tasks: list[Task] = []
-            for p in mgr_projects:
-                p_tasks = await self.task_repo.get_project_tasks(p.id, skip=0, limit=limit, status=status_filter)
-                all_tasks.extend(p_tasks)
-            return all_tasks[skip : skip + limit]
+            return await self.task_repo.list_tasks_page(
+                skip=skip, limit=limit, status=status_filter, assigned_to=assigned_to,
+                created_by=current_user.id,
+            )
 
         # Admin: get multi
         filters = {}
@@ -224,7 +215,9 @@ class TaskService:
             filters["status"] = status_filter
         if assigned_to:
             filters["assigned_to"] = assigned_to
-        return await self.task_repo.get_multi(skip=skip, limit=limit, **filters)
+        return await self.task_repo.list_tasks_page(
+            skip=skip, limit=limit, status=status_filter, assigned_to=assigned_to,
+        )
 
     async def assign_task(
         self,

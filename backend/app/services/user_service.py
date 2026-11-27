@@ -4,7 +4,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import get_password_hash
-from app.models.enums import UserRole
+from app.models.enums import ProfessionalRole, UserRole
 from app.models.user import User
 from app.repositories.user_repository import UserRepository
 from app.schemas.user import UserCreate, UserUpdate
@@ -48,15 +48,37 @@ class UserService:
         limit: int = 50,
         role: UserRole | None = None,
         department: str | None = None,
+        professional_role: ProfessionalRole | None = None,
+        is_active: bool | None = None,
+        search: str | None = None,
     ) -> tuple[Sequence[User], int]:
-        filters = {}
-        if role:
-            filters["role"] = role
-        if department:
-            filters["department"] = department
-        users = await self.user_repo.get_multi(skip=skip, limit=limit, **filters)
-        total = await self.user_repo.count(**filters)
-        return users, total
+        return await self.user_repo.list_admin_users(
+            skip=skip, limit=limit, role=role, department=department,
+            professional_role=professional_role, is_active=is_active, search=search,
+        )
+
+    async def _ensure_admin_remains(self, target: User, update_data: dict) -> None:
+        removes_admin = target.role == UserRole.ADMIN and (
+            update_data.get("role", target.role) != UserRole.ADMIN
+            or update_data.get("is_active", target.is_active) is False
+        )
+        if removes_admin:
+            admins = await self.user_repo.get_admins_for_update()
+            active_admins_after = sum(
+                1 for admin in admins
+                if (
+                    admin.id != target.id and admin.is_active
+                ) or (
+                    admin.id == target.id
+                    and update_data.get("role", admin.role) == UserRole.ADMIN
+                    and update_data.get("is_active", admin.is_active) is True
+                )
+            )
+            if active_admins_after < 1:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="The last administrator cannot be demoted or deactivated.",
+                )
 
     async def update_user(self, user_id: uuid.UUID, user_in: UserUpdate, current_user: User) -> User:
         user = await self.get_by_id(user_id)
@@ -70,6 +92,8 @@ class UserService:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only administrators can modify roles.")
         if "is_active" in update_data and current_user.role != UserRole.ADMIN:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only administrators can modify active status.")
+        if current_user.role == UserRole.ADMIN:
+            await self._ensure_admin_remains(user, update_data)
 
         if "password" in update_data:
             update_data["hashed_password"] = get_password_hash(update_data.pop("password"))
@@ -82,7 +106,18 @@ class UserService:
                     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email is already taken.")
                 update_data["email"] = new_email
 
-        return await self.user_repo.update(user, **update_data)
+        clearable_fields = {"professional_role", "job_title"}
+        explicit_clears = {
+            key for key in clearable_fields
+            if key in update_data and update_data[key] is None
+        }
+        for key in explicit_clears:
+            update_data.pop(key)
+            setattr(user, key, None)
+        updated = await self.user_repo.update(user, **update_data)
+        if explicit_clears:
+            await self.session.flush()
+        return updated
 
     async def delete_user(self, user_id: uuid.UUID, current_user: User) -> None:
         """Deactivate or delete user (Admin operation)."""
@@ -91,6 +126,14 @@ class UserService:
         if current_user.id == user_id:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot delete your own admin account.")
         user = await self.get_by_id(user_id)
+        if user.role == UserRole.ADMIN:
+            admins = await self.user_repo.get_admins_for_update()
+            active_admins_after = sum(1 for admin in admins if admin.id != user.id and admin.is_active)
+            if user.is_active and active_admins_after < 1:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="The last administrator cannot be deleted.",
+                )
         await self.user_repo.delete(user)
 
     async def get_user_workload(self, user_id: uuid.UUID) -> int:

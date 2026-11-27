@@ -62,7 +62,7 @@ class ProjectService:
         limit: int = 50,
     ) -> tuple[Sequence[Project], int]:
         if current_user.role == UserRole.ADMIN:
-            projects = await self.project_repo.get_multi(skip=skip, limit=limit)
+            projects = await self.project_repo.get_recent(skip=skip, limit=limit)
             total = await self.project_repo.count()
             return projects, total
         elif current_user.role == UserRole.MANAGER:

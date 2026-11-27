@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db, require_roles
-from app.models.enums import UserRole
+from app.models.enums import Department, ProfessionalRole, UserRole
 from app.models.user import User
 from app.schemas.common import PaginatedResponse
 from app.schemas.user import UserCreate, UserResponse, UserUpdate
@@ -26,11 +26,17 @@ async def list_users(
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     role: UserRole | None = None,
-    department: str | None = None,
+    department: Department | None = None,
+    professional_role: ProfessionalRole | None = None,
+    is_active: bool | None = None,
+    search: str | None = Query(None, min_length=1, max_length=255),
 ) -> PaginatedResponse[UserResponse]:
     skip = (page - 1) * size
     user_service = UserService(session)
-    users, total = await user_service.list_users(skip=skip, limit=size, role=role, department=department)
+    users, total = await user_service.list_users(
+        skip=skip, limit=size, role=role, department=department,
+        professional_role=professional_role, is_active=is_active, search=search,
+    )
     pages = (total + size - 1) // size if total > 0 else 1
     return PaginatedResponse(
         items=[UserResponse.model_validate(u) for u in users],
