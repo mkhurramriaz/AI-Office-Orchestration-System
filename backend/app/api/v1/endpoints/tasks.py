@@ -55,7 +55,7 @@ async def list_tasks(
 ) -> PaginatedResponse[TaskResponse]:
     skip = (page - 1) * size
     task_service = TaskService(session)
-    tasks = await task_service.list_tasks(
+    tasks, total = await task_service.list_tasks(
         current_user=current_user,
         project_id=project_id,
         status_filter=status_filter,
@@ -66,10 +66,10 @@ async def list_tasks(
     items = [TaskResponse.from_orm_model(t) for t in tasks]
     return PaginatedResponse(
         items=items,
-        total=len(items),
+        total=total,
         page=page,
         size=size,
-        pages=1,
+        pages=(total + size - 1) // size if total else 1,
     )
 
 

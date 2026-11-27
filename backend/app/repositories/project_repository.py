@@ -13,6 +13,11 @@ class ProjectRepository(BaseRepository[Project]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(Project, session)
 
+    async def get_recent(self, skip: int = 0, limit: int = 50) -> Sequence[Project]:
+        query = select(Project).order_by(Project.created_at.desc()).offset(skip).limit(limit)
+        result = await self.session.execute(query)
+        return result.scalars().all()
+
     async def get_by_manager(self, manager_id: uuid.UUID, skip: int = 0, limit: int = 50) -> Sequence[Project]:
         query = select(Project).where(Project.created_by == manager_id).offset(skip).limit(limit)
         result = await self.session.execute(query)

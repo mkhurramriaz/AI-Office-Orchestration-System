@@ -1,11 +1,12 @@
 import uuid
 from typing import Sequence
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.enums import TaskStatus
 from app.models.task import Task, TaskDependency
+from app.models.project import Project
 from app.repositories.base import BaseRepository
 
 
@@ -68,6 +69,26 @@ class TaskRepository(BaseRepository[Task]):
         query = query.offset(skip).limit(limit).order_by(Task.created_at.desc())
         result = await self.session.execute(query)
         return result.scalars().all()
+
+    async def list_tasks_page(self, *, skip: int, limit: int, project_id=None, status=None, assigned_to=None, created_by=None):
+        query = select(Task).options(selectinload(Task.dependencies))
+        count_query = select(func.count(Task.id))
+        if project_id is not None:
+            query = query.where(Task.project_id == project_id)
+            count_query = count_query.where(Task.project_id == project_id)
+        if status is not None:
+            query = query.where(Task.status == status)
+            count_query = count_query.where(Task.status == status)
+        if assigned_to is not None:
+            query = query.where(Task.assigned_to == assigned_to)
+            count_query = count_query.where(Task.assigned_to == assigned_to)
+        if created_by is not None:
+            project_ids = select(Project.id).where(Project.created_by == created_by)
+            query = query.where(Task.project_id.in_(project_ids))
+            count_query = count_query.where(Task.project_id.in_(project_ids))
+        result = await self.session.execute(query.order_by(Task.created_at.desc()).offset(skip).limit(limit))
+        total_result = await self.session.execute(count_query)
+        return result.scalars().all(), total_result.scalar_one()
 
     async def add_dependency(self, task_id: uuid.UUID, depends_on_task_id: uuid.UUID) -> TaskDependency:
         dep = TaskDependency(task_id=task_id, depends_on_task_id=depends_on_task_id)
